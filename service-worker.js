@@ -43,18 +43,19 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
+    const url = new URL(event.request.url);
     // Вопрос №3: для всех ли случаев подойдёт такое построение ключа? 
     // Нет не для всех, querystring не будет учтен
-    // В моем случае я использую url как ключ, потомучто обрабатываю 
-    // добавленные в favorite и незаписанные в cache изображения в режиме офлайн.
-    // const cacheKey = url.origin + url.pathname;
-
-    // Запускаем асинхронную запись в кеш из массива gifsForWrite
-    if (!!gifsForWrite.length) {
-        Promise.all(gifsForWrite.map(url => fetchAndPutToCache(url)));
-    }
-
-    let response = fetchWithFallbackToCache(event.request);
+    const cacheKey = url.origin + url.pathname;
+    // При кейсе: удалили картинку в офлайн, затем добавили в избранное,
+    // она будет удалена из cache, но не сможет быть добавлена назад, 
+    // и после подключения интернета, картинки небудет в cache.
+    // Необходимо ее туда добавить, для каждой картинки в storage при нажатии на избранное
+    // срабатывает fetch event, тут мы проверяем если url находится в gifsForWrite,
+    // то делаем запрос и сохраняем ее в cache
+    let response = gifsForWrite.includes(event.request.url)
+        ? fetchAndPutToCache(cacheKey, event.request.url)
+        : fetchWithFallbackToCache(cacheKey, event.request);
 
     event.respondWith(response);
 });
@@ -142,20 +143,18 @@ function handleFilesForCache() {
 }
 
 // Скачать и добавить в кеш ----- Данный метод изменен для обработки добавленных в favorite gifs в режиме офлайн
-function fetchAndPutToCache(url) {
+function fetchAndPutToCache(cacheKey, url) {
     return fetch(url)
-        .then(response => {
+       .then(response => {
             return caches.open(CACHE_VERSION)
                 .then(cache => {
                     // Вопрос №5: для чего нужно клонирование? 
-                    // Клонирование было нужно, т.к. response возвращался из функции и сохранялся в cache,
-                    // в моем случае клонирование ненужно, т.к. я не возвращаю repsonse из функции.
-                    return cache.put(url, response);
+                    return cache.put(cacheKey, response.clone());
                 })
                 .then(() => {
                     // После записи удаляем url из gifsForWrite
                     removeFromGifsForWrite(url);
-                    console.log(gifsForWrite);
+                    return response;
                 });
         })
         .catch(err => {
@@ -164,11 +163,11 @@ function fetchAndPutToCache(url) {
 }
 
 // Попытаться скачать, при неудаче обратиться в кеш
-function fetchWithFallbackToCache(request) {
+function fetchWithFallbackToCache(cacheKey, request) {
     return fetch(request)
         .catch(() => {
             console.log('[ServiceWorker] Fallback to offline cache:', request.url);
-            return caches.match(request.url);
+            return caches.match(cacheKey);
         });
 }
 
