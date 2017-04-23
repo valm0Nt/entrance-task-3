@@ -4,7 +4,7 @@
  * Сервис-воркер, обеспечивающий оффлайновую работу избранного
  */
 
-const CACHE_VERSION = '1.0.2-test';
+const CACHE_VERSION = '1.0.3-test';
 const filesForCache = [
     './assets/blocks.js',
     './assets/star.svg',
